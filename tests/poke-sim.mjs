@@ -13,7 +13,29 @@
  *   私聊戳 —— user_id 是**会话对端**，戳人者在 sender_id 里
  * 照抄 NapCat 文档直接读 user_id 会把「谁戳的」认错，所以这两个用例必须都在。
  */
-import { isPokeEvent, parsePoke, shouldReact, sendPoke, pokeCooldownRemaining, markPokeReacted, claimPokeCooldown, releasePokeCooldown, resetPokeCooldown } from '../lib/poke.js'
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+const SANDBOX_HOME = join(HERE, '..', '..', '.tmp-test', `poke-${process.pid}`)
+const SANDBOX_DATA = join(SANDBOX_HOME, '.dsh')
+mkdirSync(SANDBOX_DATA, { recursive: true })
+process.env.USERPROFILE = SANDBOX_HOME
+process.env.HOME = SANDBOX_HOME
+writeFileSync(join(SANDBOX_DATA, 'qq-bridge.config.json'), JSON.stringify({
+  enabled: true,
+  selfUin: '1000000004',
+  peerUin: '1000000001',
+  ownerUin: '1000000001',
+  groupUins: ['2000000002'],
+  routes: { private: { '1000000001': { sessionId: 'poke-test' } }, group: { '2000000002': { sessionId: 'poke-test' } } }
+}, null, 2), 'utf8')
+process.on('exit', () => {
+  try { rmSync(SANDBOX_HOME, { recursive: true, force: true }) } catch {}
+})
+
+const { isPokeEvent, parsePoke, shouldReact, sendPoke, pokeCooldownRemaining, markPokeReacted, claimPokeCooldown, releasePokeCooldown, resetPokeCooldown } = await import('../lib/poke.js')
 
 let passed = 0
 let failed = 0
