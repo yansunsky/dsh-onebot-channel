@@ -1,7 +1,7 @@
 /**
  * 在隔离 HOME 下跑一遍测试：node tests/run-isolated.mjs [测试文件名...]
  *
- * 为什么需要（docs/维护索引.md §4 坑 28）：
+ * 为什么需要（..\dshOnebotChannelDocs\维护索引.md §4 坑 28）：
  *   多数 sim 会**直接改写真实的** `~/.dsh/qq-bridge.config.json`
  *   （segments-sim / outbound-tool-sim / group-sim / poke-sim …）。
  *   本机沙箱已经把 lib/*.js 和 ~/.dsh 写成只读，所以它们必然 EPERM ——

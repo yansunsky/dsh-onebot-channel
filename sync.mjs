@@ -15,7 +15,7 @@
  *
  * 用法：node sync.mjs
  */
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { copyFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -97,30 +97,10 @@ for (const DEST of DESTS) {
     }
   }
 
-  // ⚠️ 2026-10-29 补：文档目录以前完全没同步过 —— 改了 docs/QQ对话说明.md，
-  // 副本里还是几天前的旧版，人打开看见「没改动」，实际是看错了文件。
-  // 文档不影响运行，但会误导排查，所以一并刷。
-  const docsDir = join(SRC, 'docs')
-  if (existsSync(docsDir)) {
-    const destDocs = join(DEST, 'docs')
-    if (!existsSync(destDocs)) mkdirSync(destDocs, { recursive: true })
-    for (const name of readdirSync(docsDir)) {
-      const from = join(docsDir, name)
-      if (!statSync(from).isFile()) continue
-      const to = join(destDocs, name)
-      if (existsSync(to) && statSync(to).ino === statSync(from).ino) {
-        skipped += 1
-        continue
-      }
-      try {
-        copyFileSync(from, to)
-        copied += 1
-        console.log(`  已同步 docs/${name}`)
-      } catch (error) {
-        console.error(`  同步 docs/${name} 失败：${error.message}`)
-      }
-    }
-  }
+  // ⚠️ 2026-11-13：docs/ 已整体移出仓库（现位于 ..\dshOnebotChannelDocs），
+  // 打包不再带文档，这里也就不再同步它。以前那段同步是为了让副本里的
+  // docs/QQ对话说明.md 不落后，现在文档只有一份，不存在「看错文件」的问题。
+  // 若要临时查文档，直接去仓库外的那个目录。
 
   // 副本里可能有源码已经没有的旧文件（重构删掉的模块），列出来提醒，不自动删
   for (const name of readdirSync(join(DEST, 'lib'))) {

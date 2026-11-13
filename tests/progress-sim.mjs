@@ -13,7 +13,7 @@
  *   ⛔ 不要直接跑本文件。文件顶部的 assertIsolatedTestHome() 会拒绝真实 HOME，别绕过：
  *      node tests/run-isolated.mjs tests/progress-sim.mjs
  *      npm run test:progress
- *   复盘：docs/事故复盘-2026-11-06-测试误删真实DSH目录.md
+ *   复盘：..\dshOnebotChannelDocs\事故复盘-2026-11-06-测试误删真实DSH目录.md
  */
 import { mkdirSync, rmSync, writeFileSync, utimesSync } from 'node:fs'
 import { homedir } from 'node:os'

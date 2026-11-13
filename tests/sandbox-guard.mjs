@@ -17,7 +17,7 @@
  *   `StorageError: unit 'workspace': stored version 1 is not accepted by version 2`
  * workspaceRegistry 起不来 → sessionController 一直 pending → 渲染进程
  * `web boot: 1 entry did not activate` → 连续 3 次 reload → 启动失败。
- * 完整时间线与恢复过程：`docs/事故复盘-2026-11-06-测试误删真实DSH目录.md`。
+ * 完整时间线与恢复过程：`..\dshOnebotChannelDocs\事故复盘-2026-11-06-测试误删真实DSH目录.md`。
  *
  * ## 守卫规则（防呆，不是防恶意）
  *
@@ -112,7 +112,7 @@ ${problems.map((item) => `  - ${item}`).join('\n')}
 事故背景（2026-11-06）：
   有人直接运行这个测试，删掉了真实 ~/.dsh/sessions（481 个会话 / 约 680 MB），
   并把 workspace.json 写成 version 1，导致 DSH NEXT 2.0.22 启动失败。
-  复盘：docs/事故复盘-2026-11-06-测试误删真实DSH目录.md
+  复盘：..\dshOnebotChannelDocs\事故复盘-2026-11-06-测试误删真实DSH目录.md
 
 Refusing to run: this destructive test only runs under the isolated HOME created by
 tests/run-isolated.mjs. Do not bypass this guard - use the command above.

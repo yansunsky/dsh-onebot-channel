@@ -3,14 +3,9 @@ node_modules/
 dist/
 *.tgz
 
-# 本地文档（不进仓库、不推送）。注意：docs/ 下上游已有的三份文档仍照常跟踪，
-# 所以这里只忽略本地新增的那几份，不能整目录忽略。
-docs/维护索引.md
-docs/会话设定-设计稿.md
-docs/水群潜水-设计稿.md
-# 诊断包（0.19.7 起由设置页导出到本机）。里面**全是真实数据**：
-# 群号、QQ 号、会话 id、配置快照、日志尾部 —— 绝不能进仓库，
-# 一旦跟着提交走，一次 push 就等于把这些公开了。
+# 本地文档：docs/ 已于 2026-11-13 整体移出仓库（现在在 ..\dshOnebotChannelDocs），
+# 仓库里不再有 docs/，打包也不再带任何文档（见 package.json 的 files）。
+# 下面两条仍保留，防止有人把诊断包 / 配置快照再放进仓库根目录或误建 docs/。
 docs/qq-bridge-diag-*.json
 docs/qq-bridge-config*.json
 
@@ -35,7 +30,7 @@ Thumbs.db
 
 # 本机沙箱的一次性产物（2026-11-07）
 # 这里放的是隔离测试的临时 HOME、变异验证的临时副本，以及几个
-# 「排障时写的、删不掉的」小脚本（沙箱 unlink 一律 EPERM，见 docs/维护索引.md §9）。
+# 「排障时写的、删不掉的」小脚本（沙箱 unlink 一律 EPERM，见 ..\dshOnebotChannelDocs\维护索引.md §9）。
 # 它们对仓库没有任何价值，`git clean -fdx` 可以一次清掉。
 .tmp-test/
 check-*.mjs
