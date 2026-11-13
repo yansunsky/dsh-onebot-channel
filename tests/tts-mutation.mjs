@@ -16,8 +16,8 @@
  *   · 子进程输出**重定向到文件再读**（坑 28：stdio:'pipe' 在沙箱里 EPERM，
  *     `error.stdout` 是空的 —— 会表现成「基线就说原始代码是红的」）
  */
-import { readFileSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import { readFileSync, writeFileSync, mkdirSync, cpSync, rmSync, openSync, closeSync, symlinkSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { makeIsolatedHome } from './isolated-home.mjs'
@@ -49,7 +49,7 @@ const ROOT = join(HERE, '..')
 const lines = []
 const both = (text) => { console.log(text); lines.push(text) }
 
-/** 建一份可写的插件副本（只带 lib/ 与 tests/ 与 package.json，够跑测试了）。 */
+/** 建可写源码副本，依赖通过只读使用的目录连接复用。 */
 function makeCopy() {
   const dir = makeTempDir('tts-mut-')
   if (dir === null) return { passed: false, text: '（无法创建临时目录）' }
@@ -59,6 +59,7 @@ function makeCopy() {
     } catch { /* 可选目录 */ }
   }
   copyFileSyncSafe(join(ROOT, 'package.json'), join(dir, 'package.json'))
+  symlinkSync(join(ROOT, 'node_modules'), join(dir, 'node_modules'), 'junction')
   return dir
 }
 
@@ -66,33 +67,35 @@ function copyFileSyncSafe(from, to) {
   try { writeFileSync(to, readFileSync(from)) } catch { /* 可选 */ }
 }
 
-/** 在副本里跑一个测试文件，返回是否通过 + 输出尾部。 */
+/** 在副本的隔离 HOME 中跑测试，返回状态与完整输出供断言核对。 */
 function runTest(copyDir, testFile) {
   const home = makeTempDir('tts-home-')
   if (home === null) return { passed: false, text: '（无法创建临时 HOME）' }
   mkdirSync(join(home, '.dsh'), { recursive: true })
   const outPath = join(home, 'out.txt')
   try {
-    const stdout = execFileSync(process.execPath, [join('tests', testFile)], {
-      cwd: copyDir,
-      env: { ...process.env, HOME: home, USERPROFILE: home },
-      timeout: 120000,
-      encoding: 'utf8'
-    })
-    try { writeFileSync(outPath, stdout, 'utf8') } catch { /* 写不进去就算了 */ }
-    return { passed: true, text: stdout.slice(-1500) }
-  } catch (error) {
-    // 不用 error.stdout：沙箱下它是空的（坑 28）。用 encoding 拿到的 stdout 是可靠的。
-    const text = String(error.stdout ?? '') || String(error.message ?? '')
-    try { writeFileSync(outPath, text, 'utf8') } catch { /* 同上 */ }
-    return { passed: false, text: text.slice(-1500) }
+    const fd = openSync(outPath, 'w')
+    let result
+    try {
+      result = spawnSync(process.execPath, ['tests/run-isolated.mjs', join('tests', testFile)], {
+        cwd: copyDir,
+        stdio: ['ignore', fd, fd],
+        timeout: 120000
+      })
+    } finally {
+      closeSync(fd)
+    }
+    return {
+      passed: result.status === 0,
+      text: readFileSync(outPath, 'utf8') + (result.error ? '\n' + result.error.message : '')
+    }
   } finally {
     try { rmSync(home, { recursive: true, force: true }) } catch { /* 忽略 */ }
   }
 }
 
 /** 改副本里的文件、跑测试。原工作区一个字节都不动。 */
-function mutate(label, file, search, replace, testFile) {
+function mutate(label, file, search, replace, testFile, expectedFailure) {
   const copyDir = makeCopy()
   try {
     const path = join(copyDir, file)
@@ -101,11 +104,13 @@ function mutate(label, file, search, replace, testFile) {
       both(`  ⚠️ 跳过「${label}」：找不到要改的片段`)
       return { skipped: true }
     }
+    if (original.split(search).length !== 2) throw new Error('变异未唯一命中：' + label)
     writeFileSync(path, original.replace(search, replace), 'utf8')
     const result = runTest(copyDir, testFile)
-    both(`  ${result.passed ? '❌ 漏网' : '✅ 抓住'}　${label}`)
-    if (result.passed) both(`     （测试仍然全绿 —— 说明没测到这个行为）`)
-    return result
+    const caught = !result.passed && (!expectedFailure || result.text.includes('✗ ' + expectedFailure))
+    both(`  ${caught ? '✅ 抓住' : '❌ 未抓住'}　${label}`)
+    if (!caught) both(result.text.slice(-1500))
+    return { ...result, caught }
   } finally {
     try { rmSync(copyDir, { recursive: true, force: true }) } catch { /* 忽略 */ }
   }
@@ -117,15 +122,14 @@ both('')
 both('基线：原样副本必须全绿')
 {
   const copyDir = makeCopy()
-  const base = runTest(copyDir, 'tts-breeze-sim.mjs')
-  const base2 = runTest(copyDir, 'tts-queue-sim.mjs')
-  both(`  ${base.passed ? '✅' : '❌'} tts-breeze-sim`)
-  both(`  ${base2.passed ? '✅' : '❌'} tts-queue-sim`)
-  if (!base.passed || !base2.passed) {
-    both('原始代码就红了 —— 后面的结论全部无效')
-    both(base.text)
-    try { writeFileSync(join(ROOT, 'tts-mutation-report.txt'), lines.join('\n'), 'utf8') } catch { /* 忽略 */ }
-    process.exit(1)
+  for (const test of ['tts-breeze-sim.mjs', 'tts-queue-sim.mjs', 'tts-quota-sim.mjs', 'sensitive-breeze-sim.mjs', 'voice-fail-sim.mjs', 'voice-autosave-sim.mjs']) {
+    const result = runTest(copyDir, test)
+    both(`  ${result.passed ? '✅' : '❌'} ${test}`)
+    if (!result.passed) {
+      both('原始代码就红了 —— 后面的结论全部无效')
+      both(result.text)
+      process.exit(1)
+    }
   }
   try { rmSync(copyDir, { recursive: true, force: true }) } catch { /* 忽略 */ }
 }
@@ -243,8 +247,31 @@ results.push(mutate(
 ))
 
 both('')
-const caught = results.filter((r) => r.skipped !== true && r.passed === false).length
-const leaked = results.filter((r) => r.skipped !== true && r.passed === true).length
+// 语气链路的变异必须命中指定断言，运行错误不能冒充验证成功。
+results.push(mutate('Breeze 丢弃语气字段', 'lib/tts.js',
+  'body.instructions = direction', 'void direction', 'tts-breeze-sim.mjs',
+  '默认开启只发送有效且获准的简短 instructions'))
+results.push(mutate('关闭开关仍发送语气', 'lib/tts.js',
+  "config?.voiceBreezeInstructionsEnabled !== false && direction !== ''", "direction !== ''", 'tts-breeze-sim.mjs',
+  '关闭仍传入只发送有效且获准的简短 instructions'))
+results.push(mutate('工具漏传语气', 'lib/tool.js',
+  'synthesizeForTarget(text, target, { instructions: args?.instructions })', 'synthesizeForTarget(text, target)', 'tts-quota-sim.mjs',
+  '开启的 instructions 穿过目标闸和合成入口后符合开关'))
+results.push(mutate('目标闸漏传语气', 'lib/tts-gate.js',
+  'synthesize(text, { config, engine, instructions: options.instructions })', 'synthesize(text, { config, engine })', 'tts-quota-sim.mjs',
+  '开启的 instructions 穿过目标闸和合成入口后符合开关'))
+results.push(mutate('合成入口漏传语气', 'lib/tts.js',
+  'synthesizeBreeze({ text: trimmed, config, instructions: options.instructions })', 'synthesizeBreeze({ text: trimmed, config })', 'tts-quota-sim.mjs',
+  '开启的 instructions 穿过目标闸和合成入口后符合开关'))
+results.push(mutate('语气不去空白', 'lib/tts.js',
+  "typeof instructions === 'string' ? instructions.trim() : ''", "typeof instructions === 'string' ? instructions : ''", 'tts-breeze-sim.mjs',
+  '纯空白只发送有效且获准的简短 instructions'))
+results.push(mutate('保存失败丢弃语气开关', 'lib/client.js',
+  'voiceSaveFailed.current = requestPatch', 'voiceSaveFailed.current = {}', 'voice-autosave-sim.mjs',
+  '下一项保存会带上之前失败的关闭操作'))
+
+const caught = results.filter((r) => r.caught === true).length
+const leaked = results.filter((r) => r.skipped !== true && !r.caught).length
 const skipped = results.filter((r) => r.skipped === true).length
 both(`小结：${caught} 个变异被抓住 / ${leaked} 个漏网 / ${skipped} 个跳过`)
 if (leaked > 0) both('⚠️ 有漏网 —— 说明对应行为没被真正测到，要补断言')

@@ -21,6 +21,7 @@
  *       console.log('官方校验通过')})"
  */
 import { existsSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { installSpec, validateMarketIndex } from '../scripts/market-index-rules.mjs'
@@ -185,9 +186,22 @@ console.log('\n仓库里真实的 market/index.json')
       // 索引必须描述**本仓库这个包**，不是别人的
       ok(plugin.name === pkg.name, `name 与 package.json 一致（${plugin.name}）`)
 
-      // 最新版本必须跟 package.json 同步，否则用户装到的是旧版
+      // 工作区可以先制作下一版部署包；已发布索引必须匹配它实际安装的提交。
       const newest = plugin.versions[0]
-      ok(newest.version === pkg.version, `最新版本与 package.json 一致（${newest.version}）`)
+      if (newest.source.type === 'git') {
+        try {
+          const manifestPath = [newest.source.path, 'package.json'].filter(Boolean).join('/')
+          const published = JSON.parse(execFileSync('git', ['show', `${newest.source.commit}:${manifestPath}`], {
+            cwd: SRC, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+          }))
+          ok(published.name === plugin.name, '索引指定提交的包名一致')
+          ok(published.version === newest.version, `索引版本与指定提交一致（${newest.version}）`)
+        } catch (error) {
+          ok(false, `能读取索引指定提交的包信息（${error.message}）`)
+        }
+      } else {
+        ok(newest.version === pkg.version, `npm 源最新版本与 package.json 一致（${newest.version}）`)
+      }
 
       // 版本按 SemVer 降序（客户端取第一个当推荐版本）
       const versions = plugin.versions.map(v => v.version)

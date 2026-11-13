@@ -91,6 +91,8 @@ console.log('1. 前端自动保存的每个键，后端都真的收（0.19.2 那
   ok(keys.includes('voiceBreezeKey'), '包含 API Key（用户明确要求「API 配置」也算）')
   ok(keys.includes('voiceBreezeVoice'), '包含音色（用户明确要求「音色选择」也算）')
   ok(keys.includes('voiceEngine'), '包含引擎选择')
+  ok(keys.includes('voiceBreezeInstructionsEnabled'), '情境语气开关进入自动保存队列')
+  eq(config.DEFAULTS.voiceBreezeInstructionsEnabled, true, '情境语气默认开启')
   ok(keys.includes('voiceTestText'), '包含测试语句')
 
   // 每个键给一个**与当前值不同**的合法值，跑 applyTunables，看 config 是否真的变了。
@@ -120,6 +122,7 @@ console.log('1. 前端自动保存的每个键，后端都真的收（0.19.2 那
     voiceBreezeGuidanceScale: 2,
     voiceBreezeVolume: 0.8,
     voiceBreezeSpeakerBoost: true,
+    voiceBreezeInstructionsEnabled: false,
     voiceDailyChars: 4321,
     voiceTestText: '自动保存测试句',
   }
@@ -139,6 +142,17 @@ console.log('1. 前端自动保存的每个键，后端都真的收（0.19.2 那
   api.applyTunables({ voiceBreezeKey: 'brz_should_not_land_here' })
   ok(config.getConfig().voiceBreezeKey !== 'brz_should_not_land_here',
     'voiceBreezeKey 不走 applyTunables（必须走 /save 的「非空才写」分支）')
+}
+
+console.log('\n1b. 情境语气开关保存后必须原样回显：')
+{
+  for (const enabled of [false, true]) {
+    api.applyTunables({ voiceBreezeInstructionsEnabled: enabled })
+    config.saveConfig()
+    config.loadConfig()
+    eq(config.getConfig().voiceBreezeInstructionsEnabled, enabled, '落盘重读保留 ' + enabled)
+    eq(api.publicConfig(config.getConfig()).voiceBreezeInstructionsEnabled, enabled, 'publicConfig 回显 ' + enabled)
+  }
 }
 
 console.log('\n2. 注册/推广链接：只放行 http/https（它会变成 <a href>）：')
@@ -298,6 +312,7 @@ console.log('\n6. 防抖与串行（行为级 —— 把那段代码真的跑一
   const build = (delayFor) => {
     const posts = []
     const states = []
+    const persisted = { voiceBreezeInstructionsEnabled: true }
     const makePost = (path, patch) => {
       const seq = posts.length
       const entry = { path, patch, startedAt: Date.now(), finishedAt: 0 }
@@ -307,7 +322,7 @@ console.log('\n6. 防抖与串行（行为级 —— 把那段代码真的跑一
         setTimeout(() => {
           entry.finishedAt = Date.now()
           if (delay < 0) reject(new Error('模拟失败'))
-          else resolve({ ok: true })
+          else { Object.assign(persisted, patch); resolve({ ok: true }) }
         }, Math.abs(delay))
       })
     }
@@ -323,7 +338,7 @@ console.log('\n6. 防抖与串行（行为级 —— 把那段代码真的跑一
       () => {},
       (error) => String(error && error.message ? error.message : error)
     )
-    return { api, posts, states }
+    return { api, posts, states, persisted }
   }
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -395,6 +410,33 @@ console.log('\n6. 防抖与串行（行为级 —— 把那段代码真的跑一
     await sleep(150)
     eq(h6.posts.length, 1, '卸载时待发的改动仍然发出去了（不会凭空消失）')
     eq(h6.states.length, 0, 'silent 时不写界面状态（组件已经没了）')
+  }
+
+  {
+    const h7 = build((patch, seq) => (seq === 0 ? -1 : 0))
+    h7.api.queueVoiceSave('voiceBreezeInstructionsEnabled', false)
+    h7.api.flushVoiceSave()
+    await sleep(100)
+    eq(h7.persisted.voiceBreezeInstructionsEnabled, true, '失败的关闭操作尚未落地')
+    h7.api.queueVoiceSave('voiceBreezeSpeed', 0.9)
+    h7.api.flushVoiceSave()
+    await sleep(100)
+    eq(h7.posts[1]?.patch, { voiceBreezeInstructionsEnabled: false, voiceBreezeSpeed: 0.9 },
+      '下一项保存会带上之前失败的关闭操作')
+    eq(h7.persisted.voiceBreezeInstructionsEnabled, false, '已保存状态对应实际落地的关闭操作')
+    eq(h7.states.at(-1)?.saveState, 'saved', '所有失败字段补存成功后显示已保存')
+  }
+
+  {
+    const h8 = build((patch, seq) => (seq === 0 ? -60 : 0))
+    h8.api.queueVoiceSave('voiceBreezeInstructionsEnabled', false)
+    h8.api.flushVoiceSave()
+    h8.api.queueVoiceSave('voiceBreezeInstructionsEnabled', true)
+    h8.api.flushVoiceSave()
+    await sleep(200)
+    eq(h8.posts[1]?.patch.voiceBreezeInstructionsEnabled, true, '已排队的新值优先于失败请求的旧值')
+    eq(h8.persisted.voiceBreezeInstructionsEnabled, true, '失败恢复不会把新选择覆盖回旧值')
+    eq(h8.posts.length, 2, '失败恢复不额外循环重试')
   }
 }
 

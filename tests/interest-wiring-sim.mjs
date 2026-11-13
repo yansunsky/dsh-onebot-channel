@@ -102,13 +102,13 @@ console.log('设置页：')
 ok(client.includes('renderWakeCard(),'), '唤醒词卡片被渲染（不是只定义了函数）')
 ok(client.includes('renderInterestCard(),'), '兴趣点卡片被渲染')
 {
-  // 挂在「对话节奏」那个 pane 里（用户会在那儿找手感类开关）
+  // 挂在「对话配置」那个 pane 里（用户会在那儿找手感类开关）
   const stancePane = client.slice(
     client.indexOf("if (tab === 'stance')") >= 0 ? client.indexOf("if (tab === 'stance')") : client.indexOf("} else if (tab === 'stance')"),
     client.indexOf("} else if (tab === 'proactive')")
   )
-  ok(stancePane.includes('renderWakeCard()'), '唤醒词卡片挂在「对话节奏」分区')
-  ok(stancePane.includes('renderInterestCard()'), '兴趣点卡片挂在「对话节奏」分区')
+  ok(stancePane.includes('renderWakeCard()'), '唤醒词卡片挂在「对话配置」分区')
+  ok(stancePane.includes('renderInterestCard()'), '兴趣点卡片挂在「对话配置」分区')
 }
 // 表单状态（缺了就是「界面能改、改了没用」的另一种形态：读不到初值）
 for (const key of ['wakeWords:', 'wakeNoteTemplate:', 'wakePerGroupHourly:',

@@ -27,6 +27,7 @@ const ok = (cond, label, extra = '') => {
 
 // 假 fetch：数调用次数，返回合法 WAV
 let fetchCalls = 0
+const requests = []
 function makeWav() {
   const data = Buffer.alloc(8, 0)
   const buf = Buffer.alloc(44 + data.length)
@@ -46,8 +47,9 @@ function makeWav() {
   return buf
 }
 let failNext = false
-globalThis.fetch = async () => {
+globalThis.fetch = async (url, init) => {
   fetchCalls += 1
+  requests.push({ url: String(url), init })
   if (failNext) {
     return {
       ok: false, status: 500,
@@ -211,6 +213,63 @@ console.log('\n8. 内容审计：念出来的话里有 key → 拒，且不花�
   ok(result.ok === false, '被内容审计拦下')
   ok(fetchCalls === 0, '没有网络请求（也没花钱）')
   ok(gate.quotaStatus(cfg).used === 0, '额度没动')
+}
+
+console.log('\n9. qq_tts 的 instructions 全链路与目标/额度门控：')
+{
+  const { getConfig } = await import('../lib/config.js')
+  const { registerTtsTool } = await import('../lib/tool.js')
+  const cfg = getConfig()
+  const before = { ...cfg }
+  let tool = null
+  Object.assign(cfg, baseConfig({ voiceDailyChars: 2 }), { enabled: true, peerUin: TARGET.id })
+  try {
+    await registerTtsTool({ tools: { register(spec) { tool = spec } }, effect() {} })
+    ok(tool?.name === 'qq_tts', '注册的是实际 qq_tts 工具')
+    ok(tool?.parameters.properties.instructions?.type === 'string', 'instructions schema 是 string')
+    ok(Array.isArray(tool?.parameters.required) && !tool.parameters.required.includes('instructions'),
+      'instructions 是可选参数')
+    const rows = [
+      ['开启', true, '  温柔地说，末尾带一点笑意  ', '温柔地说，末尾带一点笑意'],
+      ['关闭仍传入', false, '这是一段超过正文额度上限、也必须被完全忽略的语气指令', undefined],
+      ['遗漏', true, undefined, undefined],
+      ['空白', true, ' \n\t ', undefined],
+    ]
+    for (const [label, enabled, instructions, expected] of rows) {
+      gate.resetQuota()
+      tts.resetTtsQueue()
+      fetchCalls = 0
+      requests.length = 0
+      cfg.voiceBreezeInstructionsEnabled = enabled
+      const result = await tool.execute({ text: '你好', user_id: TARGET.id, instructions })
+      ok(result.ok === true && fetchCalls === 1, label + '从工具到 Breeze 恰好合成一次')
+      const body = JSON.parse(requests[0]?.init.body || '{}')
+      ok(body.text === '你好', label + '不把语气并进朗读正文')
+      ok(expected === undefined
+        ? !Object.prototype.hasOwnProperty.call(body, 'instructions')
+        : body.instructions === expected, label + '的 instructions 穿过目标闸和合成入口后符合开关')
+      ok(result.chars === 2 && gate.quotaStatus(cfg).used === 2,
+        label + '只按朗读正文扣 2 字，语气指令不改变额度含义')
+    }
+
+    gate.resetQuota()
+    tts.resetTtsQueue()
+    fetchCalls = 0
+    cfg.voiceBreezeInstructionsEnabled = true
+    cfg.voiceTargetsGroup = ['group:999']
+    const blocked = await tool.execute({ text: '你好', user_id: TARGET.id, group_id: '2000000002', instructions: '活泼一点' })
+    ok(blocked.ok === false && String(blocked.error).includes('没开语音'), '带 instructions 仍按群优先规则检查目标白名单')
+    ok(fetchCalls === 0 && gate.quotaStatus(cfg).used === 0, '未获准目标不请求、不扣费')
+
+    gate.chargeQuota(2, cfg)
+    const overQuota = await tool.execute({ text: '你好', user_id: TARGET.id, instructions: '活泼一点' })
+    ok(overQuota.ok === false && String(overQuota.error).includes('额度'), '带 instructions 不能绕过每日额度')
+    ok(fetchCalls === 0 && gate.quotaStatus(cfg).used === 2, '超额仍不请求且不改变已用额度')
+  } finally {
+    Object.assign(cfg, before)
+    gate.resetQuota()
+    tts.resetTtsQueue()
+  }
 }
 
 console.log(`\n结果：${pass} 过 / ${fail} 败`)

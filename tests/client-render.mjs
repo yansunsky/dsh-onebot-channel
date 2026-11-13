@@ -205,7 +205,7 @@ function paint(tabId, mode, ctxLike) {
 
 // ---- 1. 顶部导航：功能都列在上面，点了才进 ----
 const overview = paint('overview')
-for (const label of ['概览', '绑定', '对话节奏', '主动搭话', '关系记忆', '推送', '高级']) {
+for (const label of ['概览', '绑定', '对话配置', '主动搭话', '关系记忆', '推送', '高级']) {
   ok(overview.includes(label), `顶部列出「${label}」`)
 }
 ok(overview.includes('现在在跑什么'), '概览页有状态摘要')
@@ -253,15 +253,15 @@ ok(binding.includes('未绑定'), '绑定页有「未绑定（忽略）」这一
     `QQ 号列悬浮显示完整信息（实际 ${JSON.stringify(uinSpan?.props?.title)}）`)
 }
 
-// ---- 3. 对话节奏：合并窗口三个字段都在 ----
+// ---- 3. 对话配置：合并窗口三个字段都在 ----
 const stance = paint('stance')
-ok(stance.includes('合并窗口') && stance.includes('回复前静默'), '对话节奏页有合并窗口与静默')
-ok(stance.includes('判断收尾') || stance.includes('允许判断收尾'), '对话节奏页有收尾开关')
-ok(stance.includes('怎么分条'), '对话节奏页有「怎么分条」下拉（0.10.0）')
+ok(stance.includes('合并窗口') && stance.includes('回复前静默'), '对话配置页有合并窗口与静默')
+ok(stance.includes('判断收尾') || stance.includes('允许判断收尾'), '对话配置页有收尾开关')
+ok(stance.includes('怎么分条'), '对话配置页有「怎么分条」下拉（0.10.0）')
 ok(stance.includes('按换行分'), '下拉里有「按换行分」这个选项')
-// 分条间隔（2026-11-07）：从「高级」挪进「对话节奏」，并改成模式 + 数值。
-// 用户报「连着发消息太急」—— 参数本来就有，但人在「对话节奏」找不到，等于没有。
-ok(stance.includes('分条间隔'), '对话节奏页有「分条间隔」卡片（原来藏在「高级」里）')
+// 分条间隔（2026-11-07）：从「高级」挪进「对话配置」，并改成模式 + 数值。
+// 用户报「连着发消息太急」—— 参数本来就有，但人在「对话配置」找不到，等于没有。
+ok(stance.includes('分条间隔'), '对话配置页有「分条间隔」卡片（原来藏在「高级」里）')
 ok(stance.includes('固定间隔') && stance.includes('按字数'), '两种模式都列出来了')
 ok(stance.includes('条与条之间等多久'), '卡片说明了它是干什么的')
 
@@ -297,13 +297,45 @@ ok(paint('advanced').includes('高级设置'), '高级页能打开')
 // 和 ui-wiring 的分工：那边查文本，这边让 QqBridgeSection 的函数体真的跑一遍。
 {
   const stanceVoice = paint('stance')
-  ok(stanceVoice.includes('语音模式'), '对话节奏页有「语音模式」卡片')
+  ok(stanceVoice.includes('语音模式'), '对话配置页有「语音模式」卡片')
   // 四档的定义必须**整句**渲染出来（用户要求「详细举例介绍」，不是只给个名字）
   ok(stanceVoice.includes('这个模式下ai无语音工具调用权限，无法发语音'), '四档渲染出「禁用」的完整定义')
   ok(stanceVoice.includes('默认只打字；只有你明确要求发语音时才会发'), '四档渲染出「被动」的完整定义')
   ok(stanceVoice.includes('ai按聊天情境判断；默认打字，只有语音明显更合适时才发'), '四档渲染出「智能选择」的完整定义')
   ok(stanceVoice.includes('普通文字回复尽可能发语音；公式、代码、链接等不适合朗读的内容改用文字'), '四档渲染出「主动」的完整定义')
-  ok(stanceVoice.includes('重启 DSH'), '四档卡片写明了要重启')
+  ok(stanceVoice.includes('切换语音模式要**重启 DSH**'), '卡片明确只有切换语音模式需要重启')
+  ok(stanceVoice.includes('根据对话情境设计语气') && stanceVoice.includes('此开关自动保存，无需重启'),
+    '情境语气开关与无需重启说明实际渲染')
+  const initialTunables = seeds[7]
+  const instructionsInput = () => {
+    cursor = 0
+    let input = null
+    const walk = (node) => {
+      if (node === null || typeof node !== 'object') return
+      if (Array.isArray(node)) { for (const child of node) walk(child); return }
+      if (node.type === 'label' && node.props?.key === 'voice-instructions') {
+        input = node.children.find((child) => child?.type === 'input') || null
+      }
+      for (const child of node.children || []) walk(child)
+    }
+    walk(section.type(Object.assign({}, section.props)))
+    return input
+  }
+  try {
+    seeds[8] = 'stance'
+    for (const enabled of [true, false]) {
+      seeds[7] = { ...initialTunables, voiceEngine: 'breeze', voiceBreezeInstructionsEnabled: enabled }
+      const input = instructionsInput()
+      ok(input?.props.type === 'checkbox' && input.props.checked === enabled && input.props.disabled === false,
+        'Breeze 开关呈现保存值 ' + enabled + ' 且可编辑')
+      ok(typeof input?.props.onChange === 'function', 'Breeze 开关绑定变更处理器')
+    }
+    seeds[7] = { ...initialTunables, voiceEngine: 'gptsovits', voiceBreezeInstructionsEnabled: true }
+    const local = instructionsInput()
+    ok(local?.props.disabled === true && local.props.checked === true, 'GPT-SoVITS 下禁用开关并保留已保存选择')
+  } finally {
+    seeds[7] = initialTunables
+  }
 
   const adv = paint('advanced')
   ok(adv.includes('语音合成'), '高级页有「语音合成」卡片')

@@ -14,6 +14,9 @@
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { useIsolatedHome } from './isolated-home.mjs'
+
+useIsolatedHome('tts-mode-')
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (rel) => readFileSync(join(ROOT, rel), 'utf8')
@@ -124,6 +127,58 @@ console.log('\n6. 工具本身没有 engine 参数（用户要求「模型无感
   ok(!/engine:\s*\{/.test(ttsToolBlock), '⚠️ schema 里**没有** engine 参数')
   ok(/text:\s*\{/.test(ttsToolBlock), '有 text 参数')
   ok(/name: 'qq_tts'/.test(ttsToolBlock), '工具名是 qq_tts')
+}
+
+console.log('\n7. 情境语气指引按引擎、开关和目标权限生效：')
+{
+  const prompt = await import('../lib/prompt.js')
+  const base = {
+    voiceMode: 'active', voiceEngine: 'breeze',
+    voiceTargetsPrivate: ['private:1000000001'], voiceTargetsGroup: ['group:2000000002'],
+  }
+  const hasInstructions = (text) => typeof text === 'string' && /\binstructions\b/.test(text)
+  ok(/每次/.test(prompt.VOICE_INSTRUCTIONS_NOTE) && /简短/.test(prompt.VOICE_INSTRUCTIONS_NOTE)
+    && hasInstructions(prompt.VOICE_INSTRUCTIONS_NOTE), '指引明确要求每次填写简短 instructions')
+  for (const mode of ['passive', 'free', 'active']) {
+    ok(hasInstructions(prompt.voiceSectionText({ ...base, voiceMode: mode })), mode + '默认开启情境语气指引')
+    ok(!hasInstructions(prompt.voiceSectionText({ ...base, voiceMode: mode, voiceBreezeInstructionsEnabled: false })),
+      mode + '关闭后完全移除 instructions 指引')
+    ok(!hasInstructions(prompt.voiceSectionText({ ...base, voiceMode: mode, voiceEngine: 'gptsovits' })),
+      mode + '本机引擎没有 Breeze 指引')
+  }
+  ok(prompt.voiceSectionText({ ...base, voiceMode: 'off' }) === null, 'off 档不因语气默认开启而生成段落')
+  for (const target of [{ kind: 'private', id: '1000000001' }, { kind: 'group', id: '2000000002' }]) {
+    const hint = prompt.voiceTurnHint(target, base)
+    ok(hasInstructions(hint) && hint.includes(target.id), target.kind + '获准目标收到带 instructions 的 qq_tts 示例')
+    const disabled = prompt.voiceTurnHint(target, { ...base, voiceBreezeInstructionsEnabled: false })
+    const local = prompt.voiceTurnHint(target, { ...base, voiceEngine: 'gptsovits' })
+    ok(disabled.includes('qq_tts') && !hasInstructions(disabled), target.kind + '关闭只移除语气参数，仍保留合成步骤')
+    ok(local.includes('qq_tts') && !hasInstructions(local), target.kind + '本机引擎示例不含语气参数')
+  }
+  ok(prompt.voiceTurnHint({ kind: 'private', id: '999' }, base) === '', '私聊未获准不生成逐回合指引')
+  ok(prompt.voiceTurnHint({ kind: 'group', id: '999' }, base) === '', '群未获准不生成逐回合指引')
+  for (const mode of ['off', 'passive', 'free']) {
+    ok(prompt.voiceTurnHint({ kind: 'private', id: '1000000001' }, { ...base, voiceMode: mode }) === '',
+      mode + '不因开启情境语气而收到主动档逐回合指引')
+  }
+
+  const live = { ...base, voiceMode: 'free' }
+  const sections = []
+  ok(prompt.mountVoicePromptSection({ systemPrompt: { section(spec) { sections.push(spec) } } }, live), '真实挂载语音段落')
+  const section = sections[0]
+  ok(sections.length === 1 && section?.name === prompt.VOICE_SECTION_NAME && typeof section.text === 'function',
+    '仅注册一个动态 text 函数，沿用既有段落名')
+  const text = () => typeof section?.text === 'function' ? section.text() : ''
+  ok(hasInstructions(text()), '挂载后默认带情境语气指引')
+  live.voiceBreezeInstructionsEnabled = false
+  ok(!hasInstructions(text()) && text().includes('默认打字'), '同一挂载段在关闭后立即移除语气指引')
+  live.voiceBreezeInstructionsEnabled = true
+  ok(hasInstructions(text()), '同一挂载段在重新开启后恢复指引')
+  live.voiceEngine = 'gptsovits'
+  ok(!hasInstructions(text()) && !text().includes(prompt.VOICE_BILLED_NOTE), '引擎热切本机后移除语气和付费指引')
+  live.voiceEngine = 'breeze'
+  live.voiceMode = 'off'
+  ok(hasInstructions(text()) && text().includes('默认打字'), '语气和引擎实时读取，语音模式仍保持启动时的智能选择档')
 }
 
 console.log(`\n结果：${pass} 过 / ${fail} 败`)

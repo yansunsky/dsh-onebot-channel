@@ -13,7 +13,7 @@
  */
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { useIsolatedHome } from './isolated-home.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -88,6 +88,7 @@ console.log('\n1. 请求形状：output_format 必须在 query，不在 body：'
   ok(call.init.headers['xi-api-key'] === 'brz_testkey', 'xi-api-key 头正确')
   ok(call.init.headers['content-type'] === 'application/json', 'content-type 正确')
   ok(body.text === '你好呀', 'body.text 正确')
+  ok(!Object.prototype.hasOwnProperty.call(body, 'instructions'), '遗漏 instructions 时不发送该字段')
   ok(body.language_code === 'zh', 'language_code 是 zh')
   ok(!Object.prototype.hasOwnProperty.call(body, 'model_id'), '没配模型时不传 model_id（服务端按语言自动选）')
   ok(!Object.prototype.hasOwnProperty.call(body, 'voice_id'), '⚠️ body 里没有 voice_id（它在 URL 里）')
@@ -144,6 +145,71 @@ console.log('\n5. 落盘文件名（真的合成一次看产物）：')
     //    毫秒那个句点被切进了文件名（`tts_20261106180834._b89bd8.wav`）。
     ok(/^tts_\d{14}_[0-9a-f]{6}\.wav$/.test(name), '文件名是 tts_<14位时间戳>_<6位随机>.wav', name)
     ok(!/\d\./.test(name.replace(/\.wav$/, '')), '⚠️ 时间戳里没有混进小数点')
+  }
+}
+
+console.log('\n6. 情境语气开关在 Breeze 请求边界兜底：')
+{
+  const base = { voiceBreezeKey: 'k', voiceBreezeVoice: 'v' }
+  const rows = [
+    ['默认开启', {}, '  放轻声音，带一点笑意  ', '放轻声音，带一点笑意'],
+    ['显式开启', { voiceBreezeInstructionsEnabled: true }, '认真但温和', '认真但温和'],
+    ['关闭仍传入', { voiceBreezeInstructionsEnabled: false }, '这段必须被忽略', undefined],
+    ['纯空白', {}, ' \n\t ', undefined],
+    ['非字符串', {}, { tone: '温柔' }, undefined],
+  ]
+  for (const [label, extra, instructions, expected] of rows) {
+    calls.length = 0
+    const result = await tts.synthesizeBreeze({ text: '你好', config: { ...base, ...extra }, instructions })
+    ok(result.ok === true && calls.length === 1, label + '仍只合成一次')
+    const body = JSON.parse(calls[0]?.init.body || '{}')
+    ok(body.text === '你好', label + '不改变朗读原文')
+    ok(expected === undefined
+      ? !Object.prototype.hasOwnProperty.call(body, 'instructions')
+      : body.instructions === expected, label + '只发送有效且获准的简短 instructions')
+  }
+}
+
+console.log('\n7. GPT-SoVITS 不接收 Breeze 的情境语气字段：')
+{
+  const ref = join(process.env.HOME, '.dsh', 'reference.wav')
+  const bytes = Buffer.alloc(44 + 24000 * 2 * 4)
+  makeWav().copy(bytes, 0, 0, 44)
+  bytes.writeUInt32LE(bytes.length - 8, 4)
+  bytes.writeUInt32LE(bytes.length - 44, 40)
+  writeFileSync(ref, bytes)
+  const breezeFetch = globalThis.fetch
+  const localCalls = []
+  globalThis.fetch = async (url, init) => {
+    localCalls.push({ url: String(url), init })
+    if (String(url) === 'https://gptsovits.invalid/upload') {
+      return { ok: true, json: async () => ['/remote/reference.wav'] }
+    }
+    if (String(url) === 'https://gptsovits.invalid/api/inference') {
+      return { ok: true, json: async () => ({ data: [{ path: ref }] }) }
+    }
+    throw new Error('测试不允许请求未声明地址：' + url)
+  }
+  try {
+    const instructions = 'ONLY_BREEZE_INSTRUCTIONS_SENTINEL'
+    const result = await tts.synthesize('你好', {
+      engine: 'gptsovits',
+      instructions,
+      config: {
+        voiceGptsovitsUrl: 'https://gptsovits.invalid',
+        voiceGptsovitsRef: ref,
+        voiceBreezeInstructionsEnabled: true,
+      },
+    })
+    ok(result.ok === true, '带 instructions 的 GPT-SoVITS 仍正常合成落盘')
+    ok(localCalls.length === 2, '本机引擎只上传参考音频并调用 inference')
+    const inference = localCalls.find((call) => call.url.endsWith('/api/inference'))
+    const body = JSON.parse(inference?.init.body || '{}')
+    ok(Array.isArray(body.data) && body.data.includes('你好'), '仍发送 GPT-SoVITS 的 data 位置参数')
+    ok(!Object.prototype.hasOwnProperty.call(body, 'instructions') && !JSON.stringify(body).includes(instructions),
+      'Breeze instructions 不进入 GPT-SoVITS 请求的任何位置')
+  } finally {
+    globalThis.fetch = breezeFetch
   }
 }
 
