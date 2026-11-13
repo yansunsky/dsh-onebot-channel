@@ -1,0 +1,53 @@
+{
+  "format": 1,
+  "title": {
+    "en": "Yansunsky DSH plugins",
+    "zh": "单树见月 DSH 插件"
+  },
+  "plugins": [
+    {
+      "name": "dsh-onebot-channel",
+      "title": {
+        "en": "QQ / OneBot Channel",
+        "zh": "QQ 桥接（OneBot 11）"
+      },
+      "description": {
+        "en": "Bridge QQ private and group chats into DeepSeek Harness over OneBot 11.",
+        "zh": "把 QQ 私聊与群聊经 OneBot 11 协议接进 DeepSeek Harness：WebSocket 入站、工具出站，支持群唤醒词与兴趣点。"
+      },
+      "icon": "../icon.svg",
+      "author": "单树见月",
+      "homepage": "https://github.com/yansunsky/dsh-onebot-channel#readme",
+      "repository": {
+        "url": "https://github.com/yansunsky/dsh-onebot-channel"
+      },
+      "keywords": [
+        "dsh-plugin",
+        "deepseek",
+        "deepseek-harness",
+        "dsh",
+        "cordis",
+        "agent",
+        "channel",
+        "qq",
+        "onebot",
+        "onebot11",
+        "snowluma"
+      ],
+      "versions": [
+        {
+          "version": "0.24.5",
+          "publishTimestamp": 1794558076,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/yansunsky/dsh-onebot-channel",
+            "commit": "c724f1be27847fa4418b20008a969a04756b1af3"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.1"
+          }
+        }
+      ]
+    }
+  ]
+}
