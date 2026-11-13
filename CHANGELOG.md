@@ -6,6 +6,8 @@
 - `package.json` 的 `files` 去掉 `docs` 及其全部排除项，包体只剩代码、`locale/`、`README.md`、`LICENSE`。
 - `sync.mjs` 不再同步文档目录（只同步 `lib/`、`package.json`、`cordis.patch.yml`）。
 - `readme-sim` / `ui-wiring` 中依赖仓库内文档的断言改为校验「仓库无 docs 目录」和代码里的规则真源。
+- `readme-sim` 新增「打包不夹带文档」看守：`files` 里重新出现 `docs` 或 `!docs/*`、以及误删 `lib`/`locale` 都会报红（已做变异验证）。
+- 包体从 ~90 文件 / ~785 KB 降到 64 文件 / 546 KB。
 
 ## 0.24.4
 

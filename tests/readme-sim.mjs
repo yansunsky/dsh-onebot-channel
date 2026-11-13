@@ -202,6 +202,26 @@ console.log('\n链接与文档（2026-11-13：docs/ 已移出仓库）：')
   }
 }
 
+console.log('\n打包不夹带文档（2026-11-13 起）：')
+{
+  // 这一节防的是「文档又被人放回仓库 / 放回 files」。
+  // 0.24.4 及以前 files 里写着 "docs"，包里因此夹着几 MB 的聊天日志、
+  // 诊断包和过程稿 —— 每装一次就把这些真实数据铺到 node_modules 里。
+  // 断言必须查**两处**，少一处就拦不住：
+  //   ① 仓库里没有 docs/ 目录（文件层面）
+  //   ② package.json 的 files 列表里没有 docs（声明层面 —— 即使目录不在，
+  //      把 "docs" 写回 files 也会让下一个人以为「这里是该放文档的地方」）
+  const pkg = JSON.parse(readFileSync(join(SRC, 'package.json'), 'utf8'))
+  const files = Array.isArray(pkg.files) ? pkg.files : []
+  ok(!files.includes('docs'), 'package.json 的 files 里没有 "docs"')
+  ok(!files.some((f) => String(f).startsWith('!docs/')),
+    'files 里没有遗留的 !docs/* 排除项（留着说明还有人在往包里塞文档）')
+  // lib/ 必须还在 files 里 —— 这是唯一不能让「瘦身」误伤的东西，
+  // 一旦漏了，装出来的包没有代码、插件直接加载失败。
+  ok(files.includes('lib'), 'files 里仍然有 lib（别把功能一起瘦掉了）')
+  ok(files.includes('locale'), 'files 里仍然有 locale')
+}
+
 console.log('\n启动顺序（2026-10-28 加的探活门控）：')
 {
   // 这几条是这次改动的核心结论，README 写漏了就会让人按旧认知排查
