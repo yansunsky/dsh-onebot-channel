@@ -15,7 +15,7 @@
     "onebot11",
     "snowluma"
   ],
-  "author": "单树见月 <1000000005@qq.com>",
+  "author": "单树见月 <1000000005@example.invalid>",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
