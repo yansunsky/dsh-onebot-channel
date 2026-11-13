@@ -1182,9 +1182,39 @@ POST 成功、重进页面又变回原样、零报错 —— 和 0.19.2 那两�
 
 ## 安装
 
+三条路，任选一条。`<profile>` 换成你宿主实际用的 profile 名
+（桌面端是 `desktop` 且由 Electron 独占，只在应用内 **设置 → 插件** 安装）。
+
+**① npm**（装了就有版本号可回退）
+
 ```bash
-dsh plugin --profile desktop add dsh-onebot-channel
+dsh plugin --profile <profile> add dsh-onebot-channel
 ```
+
+**② 直接从 GitHub 装**（不依赖 npm 账号）
+
+```bash
+dsh plugin --profile <profile> add "git+https://github.com/yansunsky/dsh-onebot-channel.git#<40 位 commit>"
+```
+
+必须钉 commit。装分支名的话，每次 `pnpm install` 都可能装到不同代码，
+出问题时没法复现。当前推荐 commit 见 `market/index.json`。
+
+**③ 插件市场（发现）**
+
+插件 → 发现 → 添加索引源，填：
+
+```
+https://raw.githubusercontent.com/yansunsky/dsh-onebot-channel/main/market/index.json
+```
+
+索引是 format 1 的 JSON，由 `node scripts/make-market-index.mjs` 生成并用官方
+`@deepseek-ai/dsh-plugin-market-index` 校验器验过。发新版时重跑该脚本，
+它会把新版本**追加**进 `versions`（旧版保留，可回退）。
+
+> **为什么用 raw.githubusercontent 而不是 jsDelivr**：jsDelivr 的 `gh/` 通道要等
+> GitHub 那边同步缓存，刚推的提交常常 404；raw 直出没有这个延迟。代价是国内网络
+> 偶尔慢 —— DSH 给索引源只有 15 秒，慢到超时的用户改用路线 ②。
 
 装完去 **设置 → QQ 桥接** 填协议端地址和 token，把 QQ 号 / 群绑到会话上。
 
@@ -2101,6 +2131,35 @@ node sync.mjs
 
 > ⚠️ 改 `package.json` 的 `name` 时必须跟**安装目录名**一致，否则设置页入口会消失。
 > `sync.mjs` 会在同步前校验，对不上直接拒绝同步。
+
+### 发版：更新插件市场索引
+
+发新版本时，**顺序不能反**，否则用户点安装会失败：
+
+```bash
+# 1) 改版本号、跑测试、提交
+node tests/market-index-sim.mjs      # 索引规则自检（也包含在 npm test 里）
+git commit -am "feat: ..."
+
+# 2) 先推送 —— 索引里的 commit 必须已经在远程上
+git push origin HEAD:main
+git ls-remote origin refs/heads/main   # 确认 SHA 与本地 HEAD 一致
+
+# 3) 再生成索引（会自动追加版本、保留旧版供回退）
+node scripts/make-market-index.mjs
+git commit -am "chore: market index for <version>"
+git push origin HEAD:main
+```
+
+> 生成器会**检查**索引指向的 commit 是否已被 `origin/<当前分支>` 覆盖，
+> 没覆盖就红字警告。加 `--strict` 会直接失败退出，适合放进 CI。
+>
+> 索引里的 `versions` 是**累积**的：同一版本重跑会替换该条，其它版本原样保留。
+> 所以发新版不需要手动维护历史列表。
+
+**索引为什么不能手写**：错一个字段，客户端只显示「索引无效」，不说错在哪。
+规则集中在 `scripts/market-index-rules.mjs`（生成器与测试共用），
+`tests/market-index-sim.mjs` 用反例逐条钉住它们 —— 改坏了会红。
 
 ## 启动顺序：为什么入站要等一等
 
