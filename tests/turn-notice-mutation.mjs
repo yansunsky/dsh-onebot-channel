@@ -2,7 +2,7 @@
  * 变异验证（手工驱动版）：node tests/turn-notice-mutation.mjs --check <变异名>
  *
  * 为什么是这种形状（2026-11-03 实测）：
- *   `dsh-onebot-channel/lib` 的 ACL 断了继承（docs/维护索引.md §9 坑 1），
+ *   `dsh-onebot-channel/lib` 的 ACL 断了继承（..\dshOnebotChannelDocs\维护索引.md §9 坑 1），
  *   脚本里的 `writeFileSync` 对 lib/*.js 一律 EPERM —— 连还原都写不回去。
  *   所以**不能**让脚本自己改源码。改成：脚本只负责跑测试、报告哪条断言抓到了；
  *   改坏和还原由宿主文件工具（有权限）按这里的清单逐条做。

@@ -188,11 +188,17 @@ console.log('\nREADME 里不该出现的过期信息：')
   ok(!/装好之后 agent 有 12 个工具/.test(README), '不再写死「装好之后一定 12 个工具」（分档后会变）')
 }
 
-console.log('\n链接与文档：')
+console.log('\n链接与文档（2026-11-13：docs/ 已移出仓库）：')
 {
-  for (const doc of ['docs/QQ对话说明.md', 'docs/踩坑记录.md', 'docs/开发笔记.md']) {
-    ok(existsSync(join(SRC, doc)), `${doc} 存在`)
-    ok(README.includes(doc), `README 引用了 ${doc}`)
+  // docs/ 现在不在仓库里（移到了 ..\dshOnebotChannelDocs），打包也不带它。
+  // 所以这里不再断言「docs/xxx.md 存在」——那个断言会永远红。
+  // 但要盯住相反的事：仓库里不能残留 docs/ 目录，否则「移出去」就等于没做，
+  // 打包时它又会跟着 files 走回来。
+  ok(!existsSync(join(SRC, 'docs')), '仓库里没有 docs/ 目录（已整体移出）')
+  // README 仍要指出去哪找文档，否则新人不知道文档去哪了
+  ok(README.includes('dshOnebotChannelDocs'), 'README 写明了文档的新位置')
+  for (const doc of ['QQ对话说明.md', '踩坑记录.md', '开发笔记.md']) {
+    ok(README.includes(doc), `README 提到了 ${doc}`)
   }
 }
 

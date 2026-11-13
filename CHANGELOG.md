@@ -1,5 +1,12 @@
 # 更新日志
 
+## 0.24.5
+
+- 文档目录 `docs/` 整体移出仓库（现位于仓库同级的 `dshOnebotChannelDocs`），打包不再包含任何文档。
+- `package.json` 的 `files` 去掉 `docs` 及其全部排除项，包体只剩代码、`locale/`、`README.md`、`LICENSE`。
+- `sync.mjs` 不再同步文档目录（只同步 `lib/`、`package.json`、`cordis.patch.yml`）。
+- `readme-sim` / `ui-wiring` 中依赖仓库内文档的断言改为校验「仓库无 docs 目录」和代码里的规则真源。
+
 ## 0.24.4
 
 - Breeze 合成、余额和音色查询使用专用代理路由：优先读取 HTTP(S)_PROXY/NO_PROXY，Windows 无显式代理时读取已启用的静态系统代理；不修改宿主全局网络配置，不自动重放合成 POST。

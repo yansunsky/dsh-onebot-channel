@@ -290,7 +290,12 @@ const splitSrc = read('lib/split.js')
 ok(/mode !== 'paragraph'/.test(splitSrc), 'split.js 里 paragraph 模式不按句号切')
 ok(/mode === 'paragraph' \? isPunctOnly/.test(splitSrc), 'paragraph 模式不按字数合并短行')
 ok(read('lib/outbound.js').includes("config.splitMode === 'sentence'"), '转发链把 splitMode 传给了切分器')
-ok(read('docs/QQ对话说明.md').includes('换行 = 另起一条'), '对话说明里告诉了模型「换行就是分条」')
+// ⚠️ 2026-11-13：docs/ 已移出仓库（现于 ..\dshOnebotChannelDocs\QQ对话说明.md），
+//    这条断言不能再读那个文件 —— 它不在版本库里，换台机器就 ENOENT。
+//    保留意图（「换行 = 另起一条」这条分条规则必须写清楚），改验**代码里的真源**：
+//    规则定义在 config.js 的 splitMode 说明、控件文案在 client.js。
+ok(read('lib/config.js').includes('换行才另起一条'), 'config.js 里说明了「换行才另起一条」')
+ok(clientSrc.includes('按换行分'), '设置页给出了「按换行分」这个选项')
 ok(clientSrc.includes('qqb-warn'), '插件被停用时页面会显式告警')
 
 // ---- 8e. 工具箱分档（0.17.4）：对象字段的子键都要有落点 ---------------
