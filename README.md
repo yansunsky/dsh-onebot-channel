@@ -1192,10 +1192,11 @@ POST 成功、重进页面又变回原样、零报错 —— 和 0.19.2 那两�
 
 ## 安装
 
-三条路，任选一条。`<profile>` 换成你宿主实际用的 profile 名
+本仓库的新版本推荐从 GitHub 或插件市场安装；推送 GitHub 不会自动更新 npm 上的同名包。
+`<profile>` 换成你宿主实际用的 profile 名
 （桌面端是 `desktop` 且由 Electron 独占，只在应用内 **设置 → 插件** 安装）。
 
-**① npm**（装了就有版本号可回退）
+**① npm**（安装 npm registry 已发布的版本，不保证与本仓库同步）
 
 ```bash
 dsh plugin --profile <profile> add dsh-onebot-channel
@@ -1204,11 +1205,16 @@ dsh plugin --profile <profile> add dsh-onebot-channel
 **② 直接从 GitHub 装**（不依赖 npm 账号）
 
 ```bash
-dsh plugin --profile <profile> add "git+https://github.com/yansunsky/dsh-onebot-channel.git#<40 位 commit>"
+dsh plugin --profile <profile> add "github:yansunsky/dsh-onebot-channel#v0.25.0"
 ```
 
-必须钉 commit。装分支名的话，每次 `pnpm install` 都可能装到不同代码，
-出问题时没法复现。当前推荐 commit 见 `market/index.json`。
+版本标签需在发布时与代码一起推送；发布后的固定完整 commit 见 `market/index.json`。
+也支持分支名；省略 `#...` 时使用仓库默认分支 `main`。
+建议固定完整 commit 以便复现。标签和分支名需要 Git 解析，分支内容会随后续提交变化。
+
+普通 Node 项目可用 `pnpm add "github:yansunsky/dsh-onebot-channel#v0.25.0"` 安装包。
+在 DSH 中请使用上面的 `dsh plugin` 命令或桌面端插件安装入口，
+以便同时登记插件 bundle；仅运行 `pnpm add` 不会自动启用插件。
 
 **③ 插件市场（发现）**
 
@@ -1218,9 +1224,9 @@ dsh plugin --profile <profile> add "git+https://github.com/yansunsky/dsh-onebot-
 https://raw.githubusercontent.com/yansunsky/dsh-onebot-channel/main/market/index.json
 ```
 
-索引是 format 1 的 JSON，由 `node scripts/make-market-index.mjs` 生成并用官方
-`@deepseek-ai/dsh-plugin-market-index` 校验器验过。发新版时重跑该脚本，
-它会把新版本**追加**进 `versions`（旧版保留，可回退）。
+索引是 format 1 的 JSON，由 `node scripts/make-market-index.mjs` 生成。
+脚本使用 `scripts/market-index-rules.mjs` 的共享规则，规则已对照官方解析器验证。
+发新版时重跑脚本，会把新版本放到 `versions` 首位（旧版保留，可回退）。
 
 > **为什么用 raw.githubusercontent 而不是 jsDelivr**：jsDelivr 的 `gh/` 通道要等
 > GitHub 那边同步缓存，刚推的提交常常 404；raw 直出没有这个延迟。代价是国内网络
@@ -1894,7 +1900,7 @@ reply + at + text   ← 原样
   // 会话来源工作区。必须是 ~/.dsh/storages/workspace.json 里已有的工作区路径
   // （设置页「绑定」页顶部有下拉框，选中即生效）。留空 = 不筛，列出全部会话。
   // ⚠️ 这个值不只是筛会话，还是「收到的图片」副本目录的根，选错会连带把图搬走。
-  "workspaceCwd": "C:\\example\\qq-workspace",
+  "workspaceCwd": "",
   "resumeColdSession": true,                   // 会话没开着时冷启动它
   "fallbackToLiveSession": false,               // 首选会话没 agent 时改投别的会话
                                                  // ⚠️ 这会绕过路由表，默认关着
@@ -2161,8 +2167,8 @@ git commit -am "chore: market index for <version>"
 git push origin HEAD:main
 ```
 
-> 生成器会**检查**索引指向的 commit 是否已被 `origin/<当前分支>` 覆盖，
-> 没覆盖就红字警告。加 `--strict` 会直接失败退出，适合放进 CI。
+> 生成器检查目标 commit 是否已被任意 `origin/` 跟踪分支包含，
+> 未包含会警告；加 `--strict` 会在写文件前失败退出。跟踪信息应先用 `git fetch origin` 更新。
 >
 > 索引里的 `versions` 是**累积**的：同一版本重跑会替换该条，其它版本原样保留。
 > 所以发新版不需要手动维护历史列表。

@@ -12,7 +12,7 @@
  * 所以这个测试盯四件事：
  *   1. `/api/qq-bridge/workspaces` 三种读盘状态都要能返回，**坏 JSON 不能 500**
  *   2. `/save` 的 workspaceCwd 必须先校验再赋值，非法值不能落进 getConfig() 单例
- *   3. 默认值必须指向这台机器上真实存在的工作区，不能又写死一个不存在的路径
+ *   3. 发布默认值留空，不依赖开发机目录；旧默认值迁移使用隔离夹具
  *   4. 前端必须真的渲染出控件，且读不到注册表时降级成手填（不是白屏）
  *
  * 直接 import 被测模块：api.js / progress.js 都不碰 cordis 宿主。
@@ -80,7 +80,7 @@ writeRegistry({
 })
 list = workspaceChoices()
 ok(list.length === 1, '只有 path 没有 title 也算一个工作区')
-ok(list[0].title === 'DSHQQ对话', `title 缺失时用路径末段兜底（实际 ${list[0].title}）`)
+ok(list[0].title === 'qq-workspace', `title 缺失时用路径末段兜底（实际 ${list[0].title}）`)
 
 // ---- 3. 坏 JSON：不能抛、不能 500，要空表 ------------------------------------
 writeFileSync(WS_FILE, '{ 这不是 JSON ', 'utf8')
@@ -112,15 +112,11 @@ ok(list.length === 2, `丢掉没有 path / 不是对象的项（实际留下 ${l
 ok(list.some((item) => item.title === '没有 sessionIds' && item.sessionCount === 0),
   'sessionIds 缺失时 sessionCount 是 0，不是崩')
 
-// ---- 6. DEFAULTS 不能又写死一个不存在的路径 ---------------------------------
-// 这条是本次缺陷的根因，必须钉死：默认值要能在本机找到，且要能对上注册表。
+// ---- 6. 发布默认值不依赖开发机目录 -----------------------------------------
 const configSrc = readFileSync(join(PLUGIN, 'lib', 'config.js'), 'utf8')
 const defaultsBlock = configSrc.slice(configSrc.indexOf('export const DEFAULTS'), configSrc.indexOf('let config ='))
-const defaultCwd = (defaultsBlock.match(/workspaceCwd:\s*'([^']*)'/) || [])[1] || ''
-ok(defaultCwd !== '', 'DEFAULTS 里 workspaceCwd 有默认值')
-ok(defaultCwd.includes('DSHQQ对话'), `默认值指向真实工作区（实际 ${defaultCwd}）`)
-ok(existsSync(defaultCwd), `默认值目录在本机真实存在（${defaultCwd}）`)
-ok(!/D:\\\\DSH workspace\\\\QQ对话/.test(defaultsBlock), '旧的不存在路径 D:\\DSH workspace\\QQ对话 已从默认值里删掉')
+const defaultCwd = defaultsBlock.match(/workspaceCwd:\s*'([^']*)'/)?.[1]
+ok(defaultCwd === '', '默认工作区为空，不依赖开发机目录')
 
 // ---- 7. 后端：/save 必须先校验再赋值（**行为验证**，不是字符串匹配） --------
 //
@@ -342,6 +338,8 @@ ok(/workspaceCwd/.test(sessionsSrc), 'sessions.js 仍按 workspaceCwd 筛会话�
   async function loadWithConfig(extra) {
     writeFileSync(CFG_FILE, JSON.stringify({ enabled: true, ...extra }, null, 2), 'utf8')
     const mod = await import(`../lib/config.js?t=${Math.random()}`)
+    // 为旧默认值迁移注入夹具；发布 DEFAULTS.workspaceCwd 仍为空。
+    mod.DEFAULTS.workspaceCwd = 'C:\\example\\qq-workspace'
     return mod.loadConfig()
   }
 

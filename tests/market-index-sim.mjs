@@ -20,7 +20,8 @@
  *       m.parseMarketIndex(d,'https://example.com/index.json');
  *       console.log('官方校验通过')})"
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -189,15 +190,22 @@ console.log('\n仓库里真实的 market/index.json')
       // 工作区可以先制作下一版部署包；已发布索引必须匹配它实际安装的提交。
       const newest = plugin.versions[0]
       if (newest.source.type === 'git') {
+        const dir = mkdtempSync(join(tmpdir(), 'market-manifest-'))
+        const output = join(dir, 'package.json')
+        const fd = openSync(output, 'w')
         try {
           const manifestPath = [newest.source.path, 'package.json'].filter(Boolean).join('/')
-          const published = JSON.parse(execFileSync('git', ['show', `${newest.source.commit}:${manifestPath}`], {
-            cwd: SRC, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-          }))
+          execFileSync('git', ['show', `${newest.source.commit}:${manifestPath}`], {
+            cwd: SRC, stdio: ['ignore', fd, 'inherit'],
+          })
+          const published = JSON.parse(readFileSync(output, 'utf8'))
           ok(published.name === plugin.name, '索引指定提交的包名一致')
           ok(published.version === newest.version, `索引版本与指定提交一致（${newest.version}）`)
         } catch (error) {
           ok(false, `能读取索引指定提交的包信息（${error.message}）`)
+        } finally {
+          closeSync(fd)
+          rmSync(dir, { recursive: true, force: true })
         }
       } else {
         ok(newest.version === pkg.version, `npm 源最新版本与 package.json 一致（${newest.version}）`)

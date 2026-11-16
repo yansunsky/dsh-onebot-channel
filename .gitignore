@@ -3,17 +3,22 @@ node_modules/
 dist/
 *.tgz
 
-# 本地文档：docs/ 已于 2026-11-13 整体移出仓库（现在在 ..\dshOnebotChannelDocs），
-# 仓库里不再有 docs/，打包也不再带任何文档（见 package.json 的 files）。
-# 下面两条仍保留，防止有人把诊断包 / 配置快照再放进仓库根目录或误建 docs/。
-docs/qq-bridge-diag-*.json
-docs/qq-bridge-config*.json
+# 本地文档已移到仓库外，防止误放回后再次提交。
+/docs/
 
-# 本地配置与运行数据（绝不能进仓库）
-qq-bridge.config.json
-qq-bridge-state.json
-qq-bridge-load.log
+# 本地配置、诊断包与运行数据
+qq-bridge*.json
+qq-bridge*.log*
 *.log
+
+# 本地凭据（仅保留明确的环境变量示例）
+.env
+.env.*
+!.env.example
+!.env.sample
+.npmrc
+*.pem
+*.key
 
 # 编辑器与系统
 .vscode/

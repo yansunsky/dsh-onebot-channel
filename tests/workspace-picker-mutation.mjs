@@ -120,11 +120,11 @@ rmSync(baselineDir, { recursive: true, force: true })
  */
 const MUTATIONS = [
   {
-    label: 'DEFAULTS 的 workspaceCwd 写回不存在的旧路径（本次缺陷原样）',
+    label: 'DEFAULTS 的 workspaceCwd 写回硬编码路径',
     apply: (dir) => patch(dir, 'lib/config.js',
-      "workspaceCwd: 'C:\\\\example\\\\qq-workspace',",
+      "workspaceCwd: '',",
       "workspaceCwd: 'D:\\\\DSH workspace\\\\QQ对话',"),
-    expect: ['默认值指向真实工作区', '默认值目录在本机真实存在']
+    expect: ['默认工作区为空，不依赖开发机目录']
   },
   {
     label: '去掉 updatedAt 排序（最近用过的掉到最后）',

@@ -28,7 +28,7 @@
  *   node scripts/make-market-index.mjs --print        # 只打印 JSON，不写文件
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { installSpec, validateMarketIndex } from './market-index-rules.mjs'
@@ -38,7 +38,19 @@ const OUT = join(ROOT, 'market', 'index.json')
 const ICS = join(ROOT, 'market', 'icon.svg')
 
 function git(...args) {
-  return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim()
+  // 文件重定向兼容禁用子进程管道的沙箱；每次调用独立，避免并发串输出。
+  const scratch = join(ROOT, '.tmp-test')
+  mkdirSync(scratch, { recursive: true })
+  const dir = mkdtempSync(join(scratch, 'market-git-'))
+  const output = join(dir, 'stdout')
+  const fd = openSync(output, 'w')
+  try {
+    execFileSync('git', args, { cwd: ROOT, stdio: ['ignore', fd, 'inherit'] })
+    return readFileSync(output, 'utf8').trim()
+  } finally {
+    closeSync(fd)
+    rmSync(dir, { recursive: true, force: true })
+  }
 }
 
 function arg(name, fallback) {
@@ -85,7 +97,7 @@ if (existsSync(OUT)) {
   }
 }
 versions = versions.filter(v => v.version !== version)
-versions.push({
+versions.unshift({
   version,
   publishTimestamp,
   source: { type: 'git', url: repoUrl, commit },
@@ -124,35 +136,19 @@ console.log('  ✓ 索引结构校验通过')
 
 // ── 关键前置：索引指向的 commit 必须在远程上，否则用户装不上 ──
 function checkRemote() {
-  // ⚠️ `merge-base --is-ancestor` 靠**退出码**表达结果：是祖先退出 0、不是退出 1。
-  //    所以只能看「有没有抛异常」，不能看 stdout 长度 —— 那是恒真的假绿写法。
-  let covered = false
-  try {
-    execFileSync('git', ['merge-base', '--is-ancestor', commit, `refs/remotes/origin/${branch}`], {
-      cwd: ROOT,
-      stdio: 'ignore',
-    })
-    covered = true
-  } catch {
-    covered = false
-  }
-  let ahead = '?'
-  try {
-    ahead = git('rev-list', '--count', `refs/remotes/origin/${branch}..${commit}`)
-  } catch {
-    ahead = '?'
-  }
-
-  if (covered) {
-    console.log(`  ✓ commit 已被 origin/${branch} 覆盖`)
+  const coveredBy = git('for-each-ref', `--contains=${commit}`, '--format=%(refname:short)', 'refs/remotes/origin/')
+    .split('\n').map(ref => ref.trim()).filter(Boolean)
+  if (coveredBy.length) {
+    console.log(`  ✓ commit 已被 ${coveredBy.join('、')} 覆盖`)
     return true
   }
-  console.warn(`  ✗ 这个 commit 还不在 origin/${branch} 上（领先 ${ahead} 个提交）`)
-  console.warn('    → 用户点安装会失败。先 git push，再重跑本脚本。')
+  console.warn('  ✗ 本地 origin 跟踪分支尚未包含这个 commit')
+  console.warn('    → 先推送代码并更新 origin 跟踪分支，再重跑本脚本。')
   return false
 }
 
 const remoteOk = checkRemote()
+if (!remoteOk && strict) process.exit(1)
 
 // ── 写文件 ──
 const json = `${JSON.stringify(index, null, 2)}\n`
@@ -179,5 +175,3 @@ console.log('\n别人怎么用：插件 → 发现 → 添加索引源，填索�
 console.log('  GitHub 直出示例：')
 const ghPath = relative(ROOT, OUT).split('\\').join('/')
 console.log(`  https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${branch}/${ghPath}`)
-
-if (!remoteOk && strict) process.exit(1)
