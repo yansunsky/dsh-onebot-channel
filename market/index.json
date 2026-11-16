@@ -36,6 +36,18 @@
       ],
       "versions": [
         {
+          "version": "0.25.0",
+          "publishTimestamp": 1794837822,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/yansunsky/dsh-onebot-channel",
+            "commit": "e0cce2e873cccfac220dec898bd3a8bc9034a8b3"
+          },
+          "engines": {
+            "dsh": ">=0.2.0-rc.1"
+          }
+        },
+        {
           "version": "0.24.5",
           "publishTimestamp": 1794558076,
           "source": {
