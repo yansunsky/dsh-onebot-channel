@@ -2,7 +2,7 @@
  * 能力接入测试：node tests/capability-sim.mjs，退出码 0 = 全过，1 = 有失败。
  *
  * 覆盖这一轮接入的东西：
- *   1. blocked.js —— C 档 14 个 action 必须被物理拦截（连 HTTP 都不发）
+ *   1. blocked.js —— C 档 13 个 action 必须被物理拦截（连 HTTP 都不发）
  *   2. sys-faces.js —— 官方表情目录搜索 / 反查 / 降级
  *   3. face-resolve.js —— 表情名反查顺序（官方目录优先，内置表兜底）
  *   4. history.js —— 群 / 好友消息历史
@@ -60,12 +60,12 @@ globalThis.fetch = async (url, init) => {
 
 console.log('blocked.js：')
 {
-  ok(BLOCKED_ACTIONS.size === 14, `封禁清单是 14 项（实际 ${BLOCKED_ACTIONS.size}）`)
+  ok(BLOCKED_ACTIONS.size === 13, `封禁清单是 13 项（实际 ${BLOCKED_ACTIONS.size}）`)
   const mustHave = [
     'get_cookies', 'get_credentials', 'get_csrf_token', 'get_clientkey',
     'get_rkey_server', 'request_decrypt_key', 'bot_exit', 'set_online_status',
     'set_diy_online_status', 'set_input_status', 'send_like', 'set_qzone_ban',
-    'delete_qzone_msg', 'add_custom_face'
+    'delete_qzone_msg'
   ]
   for (const name of mustHave) {
     ok(BLOCKED_ACTIONS.has(name), `封禁了 ${name}`)
@@ -74,7 +74,7 @@ console.log('blocked.js：')
   const allowed = [
     'send_group_msg', 'send_private_msg', 'get_group_msg_history',
     'get_friend_msg_history', 'search_sys_faces', 'fetch_sys_faces',
-    'send_qzone_msg', 'get_qzone_feeds', 'send_custom_face', 'fetch_custom_face_detail'
+    'send_qzone_msg', 'get_qzone_feeds', 'send_custom_face', 'fetch_custom_face_detail', 'add_custom_face'
   ]
   for (const name of allowed) {
     ok(!isBlocked(name), `没误伤 ${name}`)
@@ -243,8 +243,15 @@ console.log('history.js：')
 console.log('qzone.js：')
 {
   calls = []
+  await throws(async () => {
+    await sendQzoneMsg({ content: '未经确认的正文' })
+  }, '未明确确认时拒绝发说说')
+  ok(calls.length === 0, '缺少确认时不向协议端发请求')
+}
+{
+  calls = []
   responses = { send_qzone_msg: { tid: '123' } }
-  const result = await sendQzoneMsg({ content: '今天天气不错' })
+  const result = await sendQzoneMsg({ confirm: true, content: '今天天气不错' })
   ok(result?.retcode === 0, '发说说成功')
   eq(calls[0].action, 'send_qzone_msg', '调的是 send_qzone_msg')
   eq(calls[0].params.content, '今天天气不错', '正文传对了')
@@ -253,32 +260,32 @@ console.log('qzone.js：')
 {
   calls = []
   responses = { send_qzone_msg: { tid: '123' } }
-  await sendQzoneMsg({ content: '只有好友看', visibility: 4 })
+  await sendQzoneMsg({ confirm: true, content: '只有好友看', visibility: 4 })
   eq(calls[0].params.ugc_right, 4, '可见性传对了')
 }
 {
   calls = []
   responses = { send_qzone_msg: { tid: '123' } }
-  await sendQzoneMsg({ content: '给特定的人', visibility: 64, targetUins: ['111', '222'] })
+  await sendQzoneMsg({ confirm: true, content: '给特定的人', visibility: 64, targetUins: ['111', '222'] })
   eq(calls[0].params.target_uins, [111, 222], '指定好友列表转成数字')
 }
 {
   calls = []
   await throws(async () => {
-    await sendQzoneMsg({ content: '   ' })
+    await sendQzoneMsg({ confirm: true, content: '   ' })
   }, '空正文拒绝发送')
   ok(calls.length === 0, '空正文没发请求')
 }
 {
   await throws(async () => {
-    await sendQzoneMsg({ content: '正文', visibility: 7 })
+    await sendQzoneMsg({ confirm: true, content: '正文', visibility: 7 })
   }, '非法可见性被拒绝')
 }
 {
   calls = []
   responses = { send_qzone_msg: { tid: '123' } }
   await throws(async () => {
-    await sendQzoneMsg({ content: 'a'.repeat(1001) })
+    await sendQzoneMsg({ confirm: true, content: 'a'.repeat(1001) })
   }, '超过 1000 字的正文拒绝发送')
   ok(calls.length === 0, '超长正文没发请求')
 }
